@@ -26,6 +26,7 @@ async def client(HOST, PORT, HIST_FILE):
                     await afp.write(message)
                     print(message)
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Async connection to minechat')
     parser.add_argument('--host',action='store',help = 'set chat addr',
