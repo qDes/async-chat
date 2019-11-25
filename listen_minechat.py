@@ -9,7 +9,6 @@ def get_current_time() -> str:
 
 async def client(HOST, PORT, HIST_FILE):
     while True:
-        
         try:
             reader, writer = await asyncio.open_connection(
                     HOST, PORT)
@@ -25,7 +24,7 @@ async def client(HOST, PORT, HIST_FILE):
                 if len(data) > 2:
                     message = get_current_time() + data.decode()
                     await afp.write(message)
-                print(message)
+                    print(message)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Async connection to minechat')
