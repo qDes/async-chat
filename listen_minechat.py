@@ -12,9 +12,16 @@ def get_current_time() -> str:
 
 async def client(host, port, history):
     while True:
-        connection_counter = 0
         try:
+            connection_counter = 0
             reader, writer = await asyncio.open_connection(host, port)
+            print(f'{get_current_time()}Установлено соединение')
+            async with AIOFile(history, 'a+') as afp:
+                while True:
+                    data = await reader.readline()
+                    message = get_current_time() + data.decode()
+                    print(message)
+                    await afp.write(message)
         except (ConnectionRefusedError,
                 ConnectionResetError):
             print('Нет соединения. Повторная попытка.')
@@ -22,13 +29,6 @@ async def client(host, port, history):
             if connection_counter > 2:
                 print("Выход.")
                 return None
-        print(f'{get_current_time()}Установлено соединение')
-        async with AIOFile(history, 'a+') as afp:
-            while True:
-                data = await reader.readline()
-                message = get_current_time() + data.decode()
-                print(message)
-                await afp.write(message)
 
 
 def main():
