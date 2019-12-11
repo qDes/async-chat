@@ -34,9 +34,7 @@ async def authorise(reader, writer, token):
         return False
 
 
-async def submit_message(writer, message=None):
-    if not message:
-        message = await ainput(">>> ")
+async def submit_message(writer, message):
     message += "\n\n"
     logging.debug(f"send message - {message}")
     writer.write(message.encode())
@@ -59,7 +57,8 @@ async def main(host, port, token, message, username):
         await submit_message(writer, message)
     else:
         while True:
-            await submit_message(writer)
+            message = await ainput(">>> ")
+            await submit_message(writer, message)
 
 
 if __name__ == "__main__":
