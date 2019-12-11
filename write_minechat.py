@@ -61,7 +61,7 @@ async def main(host, port, token, message, username):
             await submit_message(writer, message)
 
 
-if __name__ == "__main__":
+def run_script():
     FORMAT = "%(levelname)s:sender: %(message)s"
     logging.basicConfig(format=FORMAT, level=logging.DEBUG)
     parser = configargparse.ArgParser(description='minechat message sender',
@@ -77,3 +77,7 @@ if __name__ == "__main__":
     host, port, token = args.host, args.port, args.token
     message, username = args.message, args.username
     asyncio.run(main(host, port, token, message, username))
+
+
+if __name__ == "__main__":
+    run_script()
