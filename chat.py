@@ -2,6 +2,8 @@ import asyncio
 import gui
 import time
 import configargparse
+
+from aiofile import AIOFile
 from datetime import datetime
 
 
@@ -18,7 +20,16 @@ async def generate_msgs(queue):
         await asyncio.sleep(1)
 
 
-async def read_msgs(host, port, queue):
+async def save_messages(history, queue):
+    async with AIOFile(history, 'a+') as afp:
+        while True:
+            message = await queue.get()
+            await afp.write(message)
+            #print(message)
+
+
+async def read_msgs(host, port, queue, history_queue):
+    file_queue = asyncio.Queue()
     while True:
         try:
             connection_counter = 0
@@ -26,8 +37,9 @@ async def read_msgs(host, port, queue):
             queue.put_nowait(f'{get_current_time()}Установлено соединение')
             while True:
                 data = await reader.readline()
-                message =  data.decode()
-                queue.put_nowait(message)    
+                message = get_current_time() + data.decode()
+                queue.put_nowait(message)
+                history_queue.put_nowait(message)
         except (ConnectionRefusedError,
                 ConnectionResetError):
             queue.put_nowait('Нет соединения. Повторная попытка.')
@@ -47,14 +59,17 @@ async def main():
                help='history writing file')
     args = parser.parse_args()
     host, port, history = args.host, args.port, args.history
-
+    print(history)
     messages_queue = asyncio.Queue()
     sending_queue = asyncio.Queue()
     status_updates_queue = asyncio.Queue()
+    history_queue = asyncio.Queue()
     await asyncio.gather(
-            read_msgs(host, port, messages_queue),
+            save_messages(history, history_queue),
+            read_msgs(host, port, messages_queue, history_queue),
             gui.draw(messages_queue, sending_queue, status_updates_queue)
             )
+
 
 if __name__ == "__main__":
     asyncio.run(main())
