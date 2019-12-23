@@ -57,12 +57,20 @@ async def authorise(reader, writer, token):
     await writer.drain()
     data = await reader.readline()
     data = json.loads(data)
+    print(data)
     if data:
         logging.debug(f"Пользователь {data['nickname']} авторизован.")
         return True
     else:
         logging.debug("Токен невалидный. Проверьте его или зарегестрируйтесь заново.")
         return False
+
+
+async def submit_message(writer, message):
+    message += "\n\n"
+    logging.debug(f"send message - {message}")
+    writer.write(message.encode())
+    await writer.drain()
 
 
 async def send_msgs(host, port, queue, token):
@@ -73,7 +81,7 @@ async def send_msgs(host, port, queue, token):
         auth_status = await authorise(reader, writer, token)
     while True:
         msg = await queue.get()
-        print(msg) 
+        await submit_message(writer, msg) 
 
 
 def load_history(history, queue):
@@ -83,6 +91,8 @@ def load_history(history, queue):
 
 
 async def main():
+    FORMAT = "%(levelname)s:sender: %(message)s"
+    logging.basicConfig(format=FORMAT, level=logging.DEBUG)
     parser = configargparse.ArgParser(default_config_files=['.env'])
     parser.add('--host', required=True,
                help='chat host address')
@@ -96,6 +106,7 @@ async def main():
     args = parser.parse_args()
     host, port_listen, history = args.host, args.port_listen, args.history
     port_write, token = args.port_write, args.token
+    print(token)
     messages_queue = asyncio.Queue()
     sending_queue = asyncio.Queue()
     status_updates_queue = asyncio.Queue()
