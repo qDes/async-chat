@@ -48,6 +48,15 @@ async def read_msgs(host, port, queue, history_queue):
                 queue.put_nowait("Выход.")
                 return None
 
+async def send_msgs(host, port, queue):
+    while True:
+        msg = await queue.get()
+        print(msg) 
+
+def load_history(history, queue):
+    with open("minechat.history", 'r') as f:
+        for line in f.readlines():
+            queue.put_nowait(line)
 
 async def main():
     parser = configargparse.ArgParser(default_config_files=['.env_listen'])
@@ -59,13 +68,14 @@ async def main():
                help='history writing file')
     args = parser.parse_args()
     host, port, history = args.host, args.port, args.history
-    print(history)
     messages_queue = asyncio.Queue()
     sending_queue = asyncio.Queue()
     status_updates_queue = asyncio.Queue()
     history_queue = asyncio.Queue()
+    load_history(history, messages_queue)
     await asyncio.gather(
             save_messages(history, history_queue),
+            send_msgs(host, port, sending_queue),
             read_msgs(host, port, messages_queue, history_queue),
             gui.draw(messages_queue, sending_queue, status_updates_queue)
             )
