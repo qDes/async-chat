@@ -7,6 +7,11 @@ import json
 
 from aiofile import AIOFile
 from datetime import datetime
+from tkinter import messagebox
+
+
+class InvalidToken(Exception):
+    pass
 
 
 def get_current_time() -> str:
@@ -30,40 +35,50 @@ async def save_messages(history, queue):
             #print(message)
 
 
-async def read_msgs(host, port, queue, history_queue):
+async def read_msgs(host, port, read_queue, history_queue, status_queue):
     file_queue = asyncio.Queue()
     while True:
         try:
             connection_counter = 0
+            status_queue.put_nowait(gui.ReadConnectionStateChanged.INITIATED)
             reader, writer = await asyncio.open_connection(host, port)
-            queue.put_nowait(f'{get_current_time()}Установлено соединение')
+            read_queue.put_nowait(f'{get_current_time()}Установлено соединение.\n')
+            status_queue.put_nowait(gui.ReadConnectionStateChanged.ESTABLISHED)
             while True:
                 data = await reader.readline()
                 message = get_current_time() + data.decode()
-                queue.put_nowait(message)
+                read_queue.put_nowait(message)
                 history_queue.put_nowait(message)
         except (ConnectionRefusedError,
                 ConnectionResetError):
             queue.put_nowait('Нет соединения. Повторная попытка.')
             connection_counter += 1
             if connection_counter > 2:
-                queue.put_nowait("Выход.")
+                read_queue.put_nowait("Выход.")
                 return None
 
 
 async def authorise(reader, writer, token):
+    if not token:
+        logging.debug("Пустой токен")
+        raise InvalidToken
     message = token + "\n"
     writer.write(message.encode())
     await writer.drain()
     data = await reader.readline()
     data = json.loads(data)
     print(data)
-    if data:
-        logging.debug(f"Пользователь {data['nickname']} авторизован.")
-        return True
-    else:
-        logging.debug("Токен невалидный. Проверьте его или зарегестрируйтесь заново.")
-        return False
+    nickname = data.get("nickname")
+    #if data:
+        #logging.debug(f"Пользователь {data['nickname']} авторизован.")
+        #return True
+    if not data:
+        logging.debub("Токен невалидный")
+        raise InvalidToken
+    return nickname
+    #else:
+        #logging.debug("Токен невалидный. Проверьте его или зарегестрируйтесь заново.")
+        #return False
 
 
 async def submit_message(writer, message):
@@ -73,15 +88,18 @@ async def submit_message(writer, message):
     await writer.drain()
 
 
-async def send_msgs(host, port, queue, token):
+async def send_msgs(host, port, msgs_queue, status_queue, token):
+    status_queue.put_nowait(gui.SendingConnectionStateChanged.INITIATED)
     reader, writer = await asyncio.open_connection(host, port)
     data = await reader.readline()
     logging.debug(f"{data.decode()}")
-    if token:
-        auth_status = await authorise(reader, writer, token)
+    nickname = await authorise(reader, writer, token)
+    event = gui.NicknameReceived(nickname)
+    status_queue.put_nowait(event)
+    status_queue.put_nowait(gui.SendingConnectionStateChanged.ESTABLISHED)
     while True:
-        msg = await queue.get()
-        await submit_message(writer, msg) 
+        msg = await msgs_queue.get()
+        await submit_message(writer, msg)  
 
 
 def load_history(history, queue):
@@ -114,8 +132,10 @@ async def main():
     load_history(history, messages_queue)
     await asyncio.gather(
             save_messages(history, history_queue),
-            send_msgs(host, port_write, sending_queue, token),
-            read_msgs(host, port_listen, messages_queue, history_queue),
+            send_msgs(host, port_write, sending_queue,
+                      status_updates_queue, token),
+            read_msgs(host, port_listen, messages_queue, 
+                      history_queue, status_updates_queue),
             gui.draw(messages_queue, sending_queue, status_updates_queue)
             )
 
@@ -125,3 +145,5 @@ if __name__ == "__main__":
         asyncio.run(main())
     except (KeyboardInterrupt, gui.TkAppClosed):
         print("Exit")
+    except InvalidToken:
+        messagebox.showinfo("Неверный токен", "Проверьте токен")
