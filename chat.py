@@ -35,7 +35,8 @@ async def save_messages(history, queue):
             #print(message)
 
 
-async def read_msgs(host, port, read_queue, history_queue, status_queue):
+async def read_msgs(host, port, read_queue, 
+                    history_queue, status_queue, watchdog_queue):
     file_queue = asyncio.Queue()
     while True:
         try:
@@ -47,6 +48,7 @@ async def read_msgs(host, port, read_queue, history_queue, status_queue):
             while True:
                 data = await reader.readline()
                 message = get_current_time() + data.decode()
+                watchdog_queue.put_nowait("New message in chat")
                 read_queue.put_nowait(message)
                 history_queue.put_nowait(message)
         except (ConnectionRefusedError,
@@ -67,18 +69,11 @@ async def authorise(reader, writer, token):
     await writer.drain()
     data = await reader.readline()
     data = json.loads(data)
-    print(data)
     nickname = data.get("nickname")
-    #if data:
-        #logging.debug(f"Пользователь {data['nickname']} авторизован.")
-        #return True
     if not data:
         logging.debub("Токен невалидный")
         raise InvalidToken
     return nickname
-    #else:
-        #logging.debug("Токен невалидный. Проверьте его или зарегестрируйтесь заново.")
-        #return False
 
 
 async def submit_message(writer, message):
@@ -88,24 +83,37 @@ async def submit_message(writer, message):
     await writer.drain()
 
 
-async def send_msgs(host, port, msgs_queue, status_queue, token):
+async def send_msgs(host, port, msgs_queue, 
+                    status_queue, watchdog_queue, token):
     status_queue.put_nowait(gui.SendingConnectionStateChanged.INITIATED)
     reader, writer = await asyncio.open_connection(host, port)
     data = await reader.readline()
     logging.debug(f"{data.decode()}")
+    watchdog_queue.put_nowait('Promt before auth')
     nickname = await authorise(reader, writer, token)
+    watchdog_queue.put_nowait("Auth done")
     event = gui.NicknameReceived(nickname)
     status_queue.put_nowait(event)
     status_queue.put_nowait(gui.SendingConnectionStateChanged.ESTABLISHED)
     while True:
         msg = await msgs_queue.get()
-        await submit_message(writer, msg)  
+        watchdog_queue.put_nowait('Message sent')
+        await submit_message(writer, msg)
 
 
 def load_history(history, queue):
     with open("minechat.history", 'r') as f:
         for line in f.readlines():
             queue.put_nowait(line)
+
+async def watch_for_connection(watchdog_queue):
+    watchdog_logger = logging.getLogger('watchdog')
+    watchdog_logger.setLevel(logging.DEBUG)
+    while True:
+        msg = await watchdog_queue.get()
+        msg = f"[{int(time.time())}] Connection is alive. {msg}"
+        #print(msg)
+        watchdog_logger.info(msg)
 
 
 async def main():
@@ -124,19 +132,20 @@ async def main():
     args = parser.parse_args()
     host, port_listen, history = args.host, args.port_listen, args.history
     port_write, token = args.port_write, args.token
-    print(token)
     messages_queue = asyncio.Queue()
     sending_queue = asyncio.Queue()
     status_updates_queue = asyncio.Queue()
     history_queue = asyncio.Queue()
+    watchdog_queue = asyncio.Queue()
     load_history(history, messages_queue)
     await asyncio.gather(
             save_messages(history, history_queue),
             send_msgs(host, port_write, sending_queue,
-                      status_updates_queue, token),
+                      status_updates_queue, watchdog_queue, token),
             read_msgs(host, port_listen, messages_queue, 
-                      history_queue, status_updates_queue),
-            gui.draw(messages_queue, sending_queue, status_updates_queue)
+                      history_queue, status_updates_queue, watchdog_queue),
+            gui.draw(messages_queue, sending_queue, status_updates_queue),
+            watch_for_connection(watchdog_queue)
             )
 
 
