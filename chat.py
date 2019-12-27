@@ -6,6 +6,7 @@ import logging
 import json
 
 from aiofile import AIOFile
+from async_timeout import timeout
 from datetime import datetime
 from tkinter import messagebox
 
@@ -109,11 +110,15 @@ def load_history(history, queue):
 async def watch_for_connection(watchdog_queue):
     watchdog_logger = logging.getLogger('watchdog')
     watchdog_logger.setLevel(logging.DEBUG)
+    TIMEOUT = 1
     while True:
-        msg = await watchdog_queue.get()
-        msg = f"[{int(time.time())}] Connection is alive. {msg}"
-        #print(msg)
-        watchdog_logger.info(msg)
+        try:
+            async with timeout(TIMEOUT) as cm:
+                msg = await watchdog_queue.get()
+                msg = f"[{int(time.time())}] Connection is alive. {msg}"
+                watchdog_logger.info(msg)
+        except asyncio.TimeoutError:
+            print(f"[{int(time.time())}] {TIMEOUT}s timeout is elapsed")
 
 
 async def main():
