@@ -6,6 +6,7 @@ import logging
 import json
 
 from aiofile import AIOFile
+from aionursery import Nursery
 from async_timeout import timeout
 from datetime import datetime
 from tkinter import messagebox
@@ -121,9 +122,7 @@ async def watch_for_connection(watchdog_queue):
             print(f"[{int(time.time())}] {TIMEOUT}s timeout is elapsed")
 
 
-async def main():
-    FORMAT = "%(levelname)s:sender: %(message)s"
-    logging.basicConfig(format=FORMAT, level=logging.DEBUG)
+def parse_args():
     parser = configargparse.ArgParser(default_config_files=['.env'])
     parser.add('--host', required=True,
                help='chat host address')
@@ -135,8 +134,18 @@ async def main():
                help='chat write port')
     parser.add('--token', help='user connection token')   
     args = parser.parse_args()
-    host, port_listen, history = args.host, args.port_listen, args.history
-    port_write, token = args.port_write, args.token
+    return (args.host, args.port_listen, args.history,
+            args.port_write, args.token)
+
+
+async def handle_connection():
+    pass
+
+
+async def main():
+    FORMAT = "%(levelname)s:sender: %(message)s"
+    logging.basicConfig(format=FORMAT, level=logging.DEBUG)
+    host, port_listen, history, port_write, token = parse_args()
     messages_queue = asyncio.Queue()
     sending_queue = asyncio.Queue()
     status_updates_queue = asyncio.Queue()
