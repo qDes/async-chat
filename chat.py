@@ -11,6 +11,7 @@ from aionursery import Nursery, MultiError
 from async_timeout import timeout
 from asyncio import TimeoutError
 from datetime import datetime
+from functools import wraps
 from tkinter import messagebox
 
 
@@ -25,6 +26,17 @@ async def create_handy_nursery():
             # https://docs.python.org/3/reference/simple_stmts.html#the-raise-statement
             raise e.exceptions[0] from None
         raise
+
+
+def reconnect(func):
+    @wraps(func)
+    async def wrapped(*args, **kwargs):
+        while True:
+            try:
+                return await func(*args, **kwargs)
+            except ConnectionError:
+                    pass
+    return wrapped
 
 
 class InvalidToken(Exception):
@@ -49,7 +61,6 @@ async def save_messages(history, queue):
         while True:
             message = await queue.get()
             await afp.write(message)
-            #print(message)
 
 
 async def read_msgs(host, port, read_queue, 
@@ -135,8 +146,8 @@ async def watch_for_connection(watchdog_queue):
                 msg = f"[{int(time.time())}] Connection is alive. {msg}"
                 watchdog_logger.info(msg)
         except TimeoutError:
-            print(f"[{int(time.time())}] {TIMEOUT}s timeout is elapsed")
-            raise TimeoutError
+            #print(f"[{int(time.time())}] {TIMEOUT}s timeout is elapsed")
+            raise ConnectionError
 
 
 def parse_args():
@@ -155,17 +166,15 @@ def parse_args():
             args.port_write, args.token)
 
 
-async def handle_connection(host, port_listen, history, port_write, token):
-    messages_queue = asyncio.Queue()
-    sending_queue = asyncio.Queue()
-    status_updates_queue = asyncio.Queue()
-    history_queue = asyncio.Queue()
+@reconnect
+async def handle_connection(host, port_listen, history, 
+                            port_write, token,
+                            messages_queue,
+                            sending_queue,
+                            status_updates_queue,
+                            history_queue): 
     watchdog_queue = asyncio.Queue()
-    load_history(history, messages_queue)
     async with create_handy_nursery() as nursery:
-        nursery.start_soon(gui.draw(messages_queue, 
-                                    sending_queue, 
-                                    status_updates_queue))
         nursery.start_soon(read_msgs(host, port_listen, messages_queue,
                                      history_queue, status_updates_queue,
                                      watchdog_queue))
@@ -180,10 +189,32 @@ async def main():
     FORMAT = "%(levelname)s:sender: %(message)s"
     logging.basicConfig(format=FORMAT, level=logging.DEBUG)
     host, port_listen, history, port_write, token = parse_args()
+    messages_queue = asyncio.Queue()
+    sending_queue = asyncio.Queue()
+    status_updates_queue = asyncio.Queue()
+    history_queue = asyncio.Queue()
+    load_history(history, messages_queue)
+ 
+    async with Nursery() as nursery:
+        nursery.start_soon(handle_connection(host, port_listen, 
+                           history, port_write, token,
+                           messages_queue,
+                           sending_queue,
+                           status_updates_queue,
+                           history_queue))
+        nursery.start_soon(gui.draw(messages_queue, 
+                                    sending_queue, 
+                                    status_updates_queue))
+ 
+
+
+    '''
     try:
         await handle_connection(host, port_listen, history, port_write, token)
-    except TimeoutError:
+    except ConnectionError:
         logging.debug("reconnect")
+    '''
+
 
 if __name__ == "__main__":
     try:
