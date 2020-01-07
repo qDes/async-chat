@@ -5,12 +5,14 @@ import time
 import configargparse
 import logging
 import json
+import socket
 
 from aiofile import AIOFile
 from aionursery import Nursery, MultiError
 from async_timeout import timeout
 from asyncio import TimeoutError
 from datetime import datetime
+from gui import TkAppClosed
 from functools import wraps
 from tkinter import messagebox
 
@@ -34,8 +36,11 @@ def reconnect(func):
         while True:
             try:
                 return await func(*args, **kwargs)
-            except ConnectionError:
-                    pass
+            except (ConnectionError,
+                    socket.gaierror,
+                    MultiError):
+                print(1)
+                await asyncio.sleep(1)
     return wrapped
 
 
@@ -66,26 +71,16 @@ async def save_messages(history, queue):
 async def read_msgs(host, port, read_queue, 
                     history_queue, status_queue, watchdog_queue):
     file_queue = asyncio.Queue()
+    status_queue.put_nowait(gui.ReadConnectionStateChanged.INITIATED)
+    reader, writer = await asyncio.open_connection(host, port)
+    read_queue.put_nowait(f'{get_current_time()}Установлено соединение.\n')
+    status_queue.put_nowait(gui.ReadConnectionStateChanged.ESTABLISHED)
     while True:
-        try:
-            connection_counter = 0
-            status_queue.put_nowait(gui.ReadConnectionStateChanged.INITIATED)
-            reader, writer = await asyncio.open_connection(host, port)
-            read_queue.put_nowait(f'{get_current_time()}Установлено соединение.\n')
-            status_queue.put_nowait(gui.ReadConnectionStateChanged.ESTABLISHED)
-            while True:
-                data = await reader.readline()
-                message = get_current_time() + data.decode()
-                watchdog_queue.put_nowait("New message in chat")
-                read_queue.put_nowait(message)
-                history_queue.put_nowait(message)
-        except (ConnectionRefusedError,
-                ConnectionResetError):
-            queue.put_nowait('Нет соединения. Повторная попытка.')
-            connection_counter += 1
-            if connection_counter > 2:
-                read_queue.put_nowait("Выход.")
-                return None
+        data = await reader.readline()
+        message = get_current_time() + data.decode()
+        watchdog_queue.put_nowait("New message in chat")
+        read_queue.put_nowait(message)
+        history_queue.put_nowait(message)
 
 
 async def authorise(reader, writer, token):
@@ -123,9 +118,26 @@ async def send_msgs(host, port, msgs_queue,
     event = gui.NicknameReceived(nickname)
     status_queue.put_nowait(event)
     status_queue.put_nowait(gui.SendingConnectionStateChanged.ESTABLISHED)
+    async with create_handy_nursery() as nursery:
+        nursery.start_soon(ping_server(writer, reader, watchdog_queue))
+        nursery.start_soon(send_to_chat(writer, msgs_queue, watchdog_queue))
+    
+
+async def ping_server(writer,reader, watchdog_queue):
+    while True:
+        writer.write(b"\n")
+        await writer.drain()
+        msg = await reader.readline()
+        if msg:
+            watchdog_queue.put_nowait('Reply from server.')
+        await asyncio.sleep(2)
+
+        
+
+async def send_to_chat(writer, msgs_queue, watchdog_queue):
     while True:
         msg = await msgs_queue.get()
-        watchdog_queue.put_nowait('Message sent')
+        watchdog_queue.get()
         await submit_message(writer, msg)
 
 
@@ -138,7 +150,7 @@ def load_history(history, queue):
 async def watch_for_connection(watchdog_queue):
     watchdog_logger = logging.getLogger('watchdog')
     watchdog_logger.setLevel(logging.DEBUG)
-    TIMEOUT = 1
+    TIMEOUT = 5
     while True:
         try:
             async with timeout(TIMEOUT) as cm:
@@ -146,7 +158,6 @@ async def watch_for_connection(watchdog_queue):
                 msg = f"[{int(time.time())}] Connection is alive. {msg}"
                 watchdog_logger.info(msg)
         except TimeoutError:
-            #print(f"[{int(time.time())}] {TIMEOUT}s timeout is elapsed")
             raise ConnectionError
 
 
@@ -193,9 +204,8 @@ async def main():
     sending_queue = asyncio.Queue()
     status_updates_queue = asyncio.Queue()
     history_queue = asyncio.Queue()
-    load_history(history, messages_queue)
- 
-    async with Nursery() as nursery:
+    load_history(history, messages_queue) 
+    async with create_handy_nursery() as nursery:
         nursery.start_soon(handle_connection(host, port_listen, 
                            history, port_write, token,
                            messages_queue,
@@ -208,18 +218,10 @@ async def main():
  
 
 
-    '''
-    try:
-        await handle_connection(host, port_listen, history, port_write, token)
-    except ConnectionError:
-        logging.debug("reconnect")
-    '''
-
-
 if __name__ == "__main__":
     try:
         asyncio.run(main())
-    except (KeyboardInterrupt, gui.TkAppClosed):
+    except (KeyboardInterrupt, TkAppClosed):
         print("Exit")
     except InvalidToken:
         messagebox.showinfo("Неверный токен", "Проверьте токен")
