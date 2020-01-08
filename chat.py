@@ -14,7 +14,8 @@ from asyncio import TimeoutError
 from datetime import datetime
 from gui import TkAppClosed
 from functools import wraps
-from tkinter import messagebox
+from reg import RegistrationGUI
+from tkinter import messagebox, Tk
 
 
 @contextlib.asynccontextmanager
@@ -39,7 +40,6 @@ def reconnect(func):
             except (ConnectionError,
                     socket.gaierror,
                     MultiError):
-                print(1)
                 await asyncio.sleep(1)
     return wrapped
 
@@ -123,7 +123,7 @@ async def send_msgs(host, port, msgs_queue,
         nursery.start_soon(send_to_chat(writer, msgs_queue, watchdog_queue))
     
 
-async def ping_server(writer,reader, watchdog_queue):
+async def ping_server(writer, reader, watchdog_queue):
     while True:
         writer.write(b"\n")
         await writer.drain()
@@ -162,7 +162,7 @@ async def watch_for_connection(watchdog_queue):
 
 
 def parse_args():
-    parser = configargparse.ArgParser(default_config_files=['.env'])
+    parser = configargparse.ArgParser(default_config_files=['.env','.token'])
     parser.add('--host', required=True,
                help='chat host address')
     parser.add('--port_listen', required=True, type=int,
@@ -200,6 +200,7 @@ async def main():
     FORMAT = "%(levelname)s:sender: %(message)s"
     logging.basicConfig(format=FORMAT, level=logging.DEBUG)
     host, port_listen, history, port_write, token = parse_args()
+    print(token)
     messages_queue = asyncio.Queue()
     sending_queue = asyncio.Queue()
     status_updates_queue = asyncio.Queue()
@@ -224,4 +225,7 @@ if __name__ == "__main__":
     except (KeyboardInterrupt, TkAppClosed):
         print("Exit")
     except InvalidToken:
-        messagebox.showinfo("Неверный токен", "Проверьте токен")
+        # messagebox.showinfo("Неверный токен", "Проверьте токен")
+        root = Tk()
+        reg_gui = RegistrationGUI(root)
+        root.mainloop()
