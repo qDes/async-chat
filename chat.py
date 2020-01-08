@@ -94,7 +94,7 @@ async def authorise(reader, writer, token):
     data = json.loads(data)
     nickname = data.get("nickname")
     if not data:
-        logging.debub("Токен невалидный")
+        logging.debug("Токен невалидный")
         raise InvalidToken
     return nickname
 
@@ -150,7 +150,7 @@ def load_history(history, queue):
 async def watch_for_connection(watchdog_queue):
     watchdog_logger = logging.getLogger('watchdog')
     watchdog_logger.setLevel(logging.DEBUG)
-    TIMEOUT = 5
+    TIMEOUT = 4
     while True:
         try:
             async with timeout(TIMEOUT) as cm:
@@ -200,7 +200,6 @@ async def main():
     FORMAT = "%(levelname)s:sender: %(message)s"
     logging.basicConfig(format=FORMAT, level=logging.DEBUG)
     host, port_listen, history, port_write, token = parse_args()
-    print(token)
     messages_queue = asyncio.Queue()
     sending_queue = asyncio.Queue()
     status_updates_queue = asyncio.Queue()
@@ -223,9 +222,8 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except (KeyboardInterrupt, TkAppClosed):
-        print("Exit")
+        pass
     except InvalidToken:
-        # messagebox.showinfo("Неверный токен", "Проверьте токен")
         root = Tk()
         reg_gui = RegistrationGUI(root)
         root.mainloop()

@@ -19,17 +19,15 @@ def registration(nickname):
     TCP_HOST = int(os.environ['port_write'])
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.connect((TCP_IP, TCP_HOST))
+    data = s.recv(1024)
     s.send(b'\n')
     data = s.recv(1024)
-    nickname += '\n\n'
+    nickname += '\n'
     s.send(nickname.encode())
     data = s.recv(1024)
-    s.send(b'\n')
-    data = s.recv(1024) 
     s.close()
     reg_data = data.decode().split('\n')[0]
     reg_data = json.loads(reg_data)
-    print(reg_data)
     account_hash = reg_data.get("account_hash")
     return account_hash
 
@@ -41,10 +39,8 @@ class RegistrationGUI:
         master.geometry("500x100")
         self.label = Label(master, text="Введите ник ниже:")
         self.label.pack()
-        
         self.entry = Entry(master, width=25)
         self.entry.pack()
-
         self.greet_button = Button(master, text="Регистрация", command=self.reg_user)
         self.greet_button.pack()
 
@@ -53,8 +49,9 @@ class RegistrationGUI:
         nickname = self.entry.get()
         account_hash = registration(nickname)
         save_account(account_hash)
-        messagebox.showinfo("Info", f"{nickname} зарегестирован. Запустите приложение.")
+        messagebox.showinfo("Info", f"{nickname} зарегестирован. Перезапустите приложение.")
         self.master.quit()
+
 
 if __name__ == "__main__":
     root = Tk()
