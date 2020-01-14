@@ -1,5 +1,4 @@
 import asyncio
-import contextlib
 import gui
 import time
 import configargparse
@@ -8,40 +7,13 @@ import json
 import socket
 
 from aiofile import AIOFile
-from aionursery import Nursery, MultiError
 from async_timeout import timeout
 from asyncio import TimeoutError
 from datetime import datetime
 from gui import TkAppClosed
-from functools import wraps
 from reg import RegistrationGUI
 from tkinter import messagebox, Tk
-
-
-@contextlib.asynccontextmanager
-async def create_handy_nursery():
-    try:
-        async with Nursery() as nursery:
-            yield nursery
-    except MultiError as e:
-        if len(e.exceptions) == 1:
-            # suppress exception chaining
-            # https://docs.python.org/3/reference/simple_stmts.html#the-raise-statement
-            raise e.exceptions[0] from None
-        raise
-
-
-def reconnect(func):
-    @wraps(func)
-    async def wrapped(*args, **kwargs):
-        while True:
-            try:
-                return await func(*args, **kwargs)
-            except (ConnectionError,
-                    socket.gaierror,
-                    MultiError):
-                await asyncio.sleep(1)
-    return wrapped
+from tools import create_handy_nursery, reconnect
 
 
 class InvalidToken(Exception):
