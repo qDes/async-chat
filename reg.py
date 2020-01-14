@@ -17,15 +17,17 @@ def register_user(nickname):
     TCP_IP = os.environ['host']
     TCP_HOST = int(os.environ['port_write'])
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect((TCP_IP, TCP_HOST))
-    data = s.recv(1024)
-    s.send(b'\n')
-    data = s.recv(1024)
-    nickname += '\n'
-    s.send(nickname.encode())
-    data = s.recv(1024)
-    s.close()
-    reg_data = data.decode().split('\n')[0]
+    try:
+        s.connect((TCP_IP, TCP_HOST))
+        data = s.recv(1024)
+        s.send(b'\n')
+        data = s.recv(1024)
+        nickname += '\n'
+        s.send(nickname.encode())
+        data = s.recv(1024)
+    finally:
+        s.close()
+    reg_data = data.decode('utf-8').split('\n')[0]
     reg_data = json.loads(reg_data)
     account_hash = reg_data.get("account_hash")
     return account_hash
@@ -34,7 +36,7 @@ def register_user(nickname):
 class RegistrationGUI:
     def __init__(self, master):
         self.master = master
-        master.title("Registration")
+        master.title("Регистрация")
         master.geometry("500x100")
         self.label = Label(master, text="Введите ник ниже:")
         self.label.pack()
