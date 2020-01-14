@@ -3,7 +3,6 @@ import socket
 import os
 
 from dotenv import load_dotenv
-from tkinter import *
 from tkinter import Tk, Label, Button, Entry, messagebox
 
 
@@ -13,7 +12,7 @@ def save_account(token):
         f.write(to_file)
 
 
-def registration(nickname):
+def register_user(nickname):
     load_dotenv()
     TCP_IP = os.environ['host']
     TCP_HOST = int(os.environ['port_write'])
@@ -47,7 +46,7 @@ class RegistrationGUI:
 
     def reg_user(self):
         nickname = self.entry.get()
-        account_hash = registration(nickname)
+        account_hash = register_user(nickname)
         save_account(account_hash)
         messagebox.showinfo("Info", f"{nickname} зарегестирован. Перезапустите приложение.")
         self.master.quit()
