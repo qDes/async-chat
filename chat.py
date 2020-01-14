@@ -47,12 +47,19 @@ async def read_msgs(host, port, read_queue,
     reader, writer = await asyncio.open_connection(host, port)
     read_queue.put_nowait(f'{get_current_time()}Установлено соединение.\n')
     status_queue.put_nowait(gui.ReadConnectionStateChanged.ESTABLISHED)
+    async with create_handy_nursery() as nursery:
+        nursery.start_soon(read_message(reader, read_queue,
+                           history_queue, watchdog_queue))
+    status_queue.put_nowait(gui.ReadConnectionStateChanged.CLOSED)
+
+
+async def read_message(reader, read_queue,
+                       history_queue, watchdog_queue):
     while True:
         data = await reader.readline()
         message = get_current_time() + data.decode()
         watchdog_queue.put_nowait("New message in chat")
         read_queue.put_nowait(message)
-        history_queue.put_nowait(message)
 
 
 async def authorise(reader, writer, token):
@@ -93,7 +100,8 @@ async def send_msgs(host, port, msgs_queue,
     async with create_handy_nursery() as nursery:
         nursery.start_soon(ping_server(writer, reader, watchdog_queue))
         nursery.start_soon(send_to_chat(writer, msgs_queue, watchdog_queue))
-    
+    status_queue.put_nowait(gui.SendingConnectionStateChanged.CLOSED)
+ 
 
 async def ping_server(writer, reader, watchdog_queue):
     while True:
@@ -161,7 +169,6 @@ async def handle_connection(host, port_listen, history,
         nursery.start_soon(read_msgs(host, port_listen, messages_queue,
                                      history_queue, status_updates_queue,
                                      watchdog_queue))
-        nursery.start_soon(save_messages(history, history_queue))
         nursery.start_soon(send_msgs(host, port_write,
                                      sending_queue, status_updates_queue,
                                      watchdog_queue, token))
@@ -184,6 +191,7 @@ async def main():
                            sending_queue,
                            status_updates_queue,
                            history_queue))
+        nursery.start_soon(save_messages(history, history_queue))
         nursery.start_soon(gui.draw(messages_queue, 
                                     sending_queue, 
                                     status_updates_queue))
