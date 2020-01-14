@@ -1,4 +1,6 @@
+import asyncio
 import contextlib
+import socket
 
 from aionursery import Nursery, MultiError
 from functools import wraps
